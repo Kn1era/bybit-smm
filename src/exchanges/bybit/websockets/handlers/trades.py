@@ -1,58 +1,29 @@
-
 import numpy as np
 from src.sharedstate import SharedState
 
 
 class BybitTradesInit:
-
-
     def __init__(self, sharedstate: SharedState, data) -> None:
         self.ss = sharedstate
-        self.data = data['result']['list']
+        self.data = data["result"]["list"]
 
-    
     def process(self):
+        trades_list = []
 
         for row in self.data:
+            side = 0 if row["side"] == "Buy" else 1
+            trades_list.append([row["time"], side, row["price"], row["size"]])
 
-            time = row['time']
-            price = row['price']
-            qty = row['size']
-
-            if row['side'] == 'Buy':
-                side = 0
-                
-            else:
-                side = 1
-
-            new_trade = np.array([[time, side, price, qty]], dtype=float)
-
-            self.ss.bybit_trades.append(new_trade)
-
+        trades_array = np.array(trades_list, dtype=float)
+        self.ss.bybit_trades.extend(trades_array)
 
 
 class BybitTradesHandler:
-
-
     def __init__(self, sharedstate: SharedState, data) -> None:
         self.ss = sharedstate
         self.data = data[0]
 
-    
     def process(self):
-
-        time = self.data['T']
-        price = self.data['p']
-        qty = self.data['v']
-
-        if self.data['S'] == 'Buy':
-            side = 0
-
-        else:
-            side = 1
-
-        # New trade \
-        new_trade = np.array([[time, side, price, qty]], dtype=float)
-
-        # Append to array, ring buffer handles maxlen and overwrite \
+        side = 0 if self.data["S"] == "Buy" else 1
+        new_trade = np.array([[self.data["T"], side, self.data["p"], self.data["v"]]], dtype=float)
         self.ss.bybit_trades.append(new_trade)

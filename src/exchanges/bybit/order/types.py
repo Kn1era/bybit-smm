@@ -1,127 +1,62 @@
+from enum import Enum
+from typing import Union
 
 
-class OrderTypesSpot:
+class OrderCategory(Enum):
+    SPOT = "spot"
+    LINEAR = "linear"
 
-    
-    def __init__(self, symbol: str, margin: bool):
+
+class OrderBase:
+    def __init__(self, symbol: str, category: OrderCategory):
         self.symbol = symbol
-        
-        if margin == True:
-            self.margin = 1
+        self.category = category.value
 
-        if margin == False:
-            self.margin = 0
-
-    
-    def limit(self, side: str, price: str, qty: str):
-
-        payload = {
-            "category": "spot",
+    def _base_payload(self) -> dict[str, str | int]:
+        return {
+            "category": self.category,
             "symbol": self.symbol,
-            "isLeverage": self.margin,
+        }
+
+    def create_limit_payload(self, side: str, price: str, qty: str) -> dict:
+        return {
+            **self._base_payload(),
             "side": side,
             "orderType": "Limit",
             "price": price,
             "qty": qty,
-            "timeInForce": "PostOnly"
+            "timeInForce": "PostOnly",
         }
 
-        return payload
-
-    
-    def market(self, side: str, qty: str):
-
-        payload = {
-            "category": "spot",
-            "symbol": self.symbol,
-            "isLeverage": self.margin,
+    def create_market_payload(self, side: str, qty: str) -> dict:
+        return {
+            **self._base_payload(),
             "side": side,
             "orderType": "Market",
             "qty": qty,
         }
 
+    def cancel_payload(self, orderId: str) -> dict:
+        return {**self._base_payload(), "orderId": orderId}
+
+
+class OrderTypesSpot(OrderBase):
+    def __init__(self, symbol: str, margin: bool):
+        super().__init__(symbol, OrderCategory.SPOT)
+        self.is_leverage = 1 if margin else 0
+
+    def _base_payload(self) -> dict[str, Union[str, int]]:
+        payload = super()._base_payload()
+        payload["isLeverage"] = self.is_leverage
         return payload
 
 
-    def cancel(self, orderId: str):
-
-        payload = {
-            "category": "spot",
-            "symbol": self.symbol,
-            "orderId": orderId
-        }
-
-        return payload
-
-
-
-class OrderTypesFutures:
-
-    
+class OrderTypesFutures(OrderBase):
     def __init__(self, symbol: str):
-        self.symbol = symbol
+        super().__init__(symbol, OrderCategory.LINEAR)
 
-    
-    def limit(self, order):
+    def amend_payload(self, order) -> dict:
+        return {**self._base_payload(), "orderId": order[0], "qty": order[2], "price": order[1]}
 
-        payload = {
-            "category": "linear",
-            "symbol": self.symbol,
-            "side": str(order[0]),
-            "orderType": "Limit",
-            "qty": str(order[2]),
-            "price": str(order[1]),
-            "timeInForce": "PostOnly"
-        }
-
-        return payload
-
-    
-    def market(self, order):
-
-        payload = {
-            "category": "linear",
-            "symbol": self.symbol,
-            "side": str(order[0]),
-            "orderType": "Market",
-            "qty": str(order[1]),
-        }
-
-        return payload
-
-
-    def amend(self, order):
-        
-        payload = {
-            "category": "linear",
-            "symbol": self.symbol,
-            "orderId": str(order[0]),
-            "qty": str(order[2]),
-            "price": str( order[1])
-        }
-
-        return payload
-
-
-    def cancel(self, orderId: str):
-
-        payload = {
-            "category": "linear",
-            "symbol": self.symbol,
-            "orderId": orderId
-        }
-
-        return payload
-
-
-    def cancel_all(self):
-
-        payload = {
-            "category": "linear",
-            "symbol": self.symbol
-        }
-
-        return payload
-
-
-    
+    def cancel_all_payload(self) -> dict:
+        return self._base_payload()

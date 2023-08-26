@@ -2,23 +2,18 @@ import numpy as np
 from numba import njit
 
 
-@njit(nogil=True)
-def ema(arr_in: np.array, window: int) -> np.array:
+@njit(nogil=True, fastmath=True)  # Enable fastmath for potential speed-up
+def ema(arr_in: np.ndarray, window: int) -> np.ndarray:
     """
-    Hyper-fast EMA implementation \n
-    Be careful with the data type in the array! 
+    Hyper-fast EWMA implementation
     """
-    
     n = arr_in.shape[0]
-    ewma = np.empty(n, dtype=float)
+    ewma = np.empty(n, dtype=np.float64)
     alpha = 2 / float(window + 1)
-    w = 1
-    ewma_old = arr_in[0]
-    ewma[0] = ewma_old
+
+    ewma[0] = arr_in[0]
 
     for i in range(1, n):
-        w += (1-alpha)**i
-        ewma_old = ewma_old*(1-alpha) + arr_in[i]
-        ewma[i] = ewma_old / w
-        
+        ewma[i] = alpha * arr_in[i] + (1 - alpha) * ewma[i - 1]
+
     return ewma

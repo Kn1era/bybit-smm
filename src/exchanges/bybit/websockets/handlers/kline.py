@@ -1,77 +1,61 @@
+from collections import deque
 
 import numpy as np
 import pandas as pd
 
 from src.indicators.bbw import bbw
-
 from src.sharedstate import SharedState
 
 
-class BybitKlineInit:
-
-
-    def __init__(self, sharedstate: SharedState, recv) -> None:
+class BybitKlineProcessor:
+    def __init__(self, sharedstate: SharedState, recv_data=None) -> None:
         self.ss = sharedstate
-        self.data = recv['result']['list']
 
-    
-    def process(self):
+        if recv_data:
+            self.data = recv_data["result"]["list"]
+            self.initialize_klines()
+        else:
+            self.data = None
+
+    def initialize_klines(self):
         """
-        Used to attain close values and calculate volatility \n
+        Used to attain close values and calculate volatility
         """
+        # Clear existing deque (if needed)
+        self.ss.bybit_klines.clear()
 
-        titles = ['Time', 'Open', 'High', 'Low', 'Close', 'Volume', 'Turnover']
-        df = pd.DataFrame(self.data, columns=titles)[::-1]
+        for candle in reversed(self.data):
+            self.ss.bybit_klines.append(candle)
 
-        self.ss.bybit_klines = df.to_numpy(dtype=float)
+        self.update_volatility()
 
-        self.ss.volatility_value = bbw(
-            arr_in = self.ss.bybit_klines, 
-            length = self.ss.bb_length, 
-            std = self.ss.bb_std
-        )
-
-        self.ss.volatility_value += self.ss.volatility_offset
-
-
-
-class BybitKlineHandler:
-
-
-    def __init__(self, sharedstate: SharedState, data) -> None:
-        self.ss = sharedstate
-        self.data = data
-
-    
-    def process(self):
+    def process(self, new_data):
         """
-        Used to attain close values and calculate volatility \n
-        If candle close, shift array -1 and add new value \n
-        Otherwise, update the most recent value \n
+        Used to attain close values and calculate volatility
         """
+        self.data = new_data
 
         for candle in self.data:
-
-            time = candle["start"]
-            open = candle["open"]
-            high = candle["high"]
-            low = candle["low"]
-            close = candle["close"]
-            volume = candle["volume"]
-            turnover = candle["turnover"]
-
-            new = np.array([time, open, high, low, close, volume, turnover], dtype=float)
-
-            if candle['confirm'] == True:
-                self.ss.bybit_klines = np.append(arr=self.ss.bybit_klines[1:], values=new.reshape(1, 7), axis=0)
-
-            else:
-                self.ss.bybit_klines[-1] = new
-            
-            self.ss.volatility_value = bbw(
-                arr_in = self.ss.bybit_klines, 
-                length = self.ss.bb_length, 
-                std = self.ss.bb_std
+            new = (
+                candle["start"],
+                candle["open"],
+                candle["high"],
+                candle["low"],
+                candle["close"],
+                candle["volume"],
+                candle["turnover"],
             )
 
-            self.ss.volatility_value += self.ss.volatility_offset
+            if candle["confirm"]:
+                self.ss.bybit_klines.append(new)
+            else:
+                self.ss.bybit_klines[-1] = new
+
+            self.update_volatility()
+
+    def update_volatility(self):
+        closes = [kline[4] for kline in self.ss.bybit_klines]
+        self.ss.volatility_value = bbw(
+            arr_in=np.array(closes, dtype=np.float64), length=self.ss.bb_length, std_numb=self.ss.bb_std
+        )
+        self.ss.volatility_value += self.ss.volatility_offset
